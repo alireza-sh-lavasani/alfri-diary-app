@@ -5,12 +5,36 @@ import axios from "axios";
 import { loginRequest } from "../auth/authConfig";
 import dayjs from "dayjs";
 import { DatePicker } from "@mui/x-date-pickers";
+import {
+  Button,
+  Box,
+  Typography,
+  CircularProgress,
+  LinearProgress,
+  Stack,
+  Grid,
+  Fab,
+  Avatar,
+} from "@mui/material";
+import { CloudUpload, Create, Description } from "@mui/icons-material";
+interface Thumbnail {
+  url: string;
+  width: number;
+  height: number;
+}
+
+interface ThumbnailSet {
+  small?: Thumbnail;
+  medium?: Thumbnail;
+  large?: Thumbnail;
+}
 
 interface Document {
   id: string;
   name: string;
   webUrl: string;
   createdDateTime: string;
+  thumbnails?: ThumbnailSet[];
 }
 
 interface GroupedDocuments {
@@ -73,34 +97,35 @@ const FileOperations: React.FC = () => {
     const currentYear = now.year();
     const month = now.format("MM");
     const day = now.format("DD");
-
+  
     try {
       let allDocuments: Document[] = [];
-
+  
       if (process.env.REACT_APP_USE_MOCK_DOCUMENTS === "true") {
         allDocuments = generateMockData(selectedDate);
       } else {
         setIsLoading(true);
-
+  
         // Fetch documents for the last 10 years (you can adjust this number)
         for (let year = currentYear; year > currentYear - 10; year--) {
-          const startDate = `${year}-${month}-${day}T00:00:00Z`;
-          const endDate = `${year}-${month}-${parseInt(day) + 1}T00:00:00Z`;
-
+          const startDate = dayjs(`${year}-${month}-${day}`).startOf('day').toISOString();
+          const endDate = dayjs(startDate).add(1, 'day').toISOString();
+  
           const result = await graphClient
             .api("/me/drive/root:/Documents:/children")
             .filter(
               `createdDateTime ge ${startDate} and createdDateTime lt ${endDate}`
             )
-            .select("id,name,webUrl,createdDateTime")
+            .select("id,name,webUrl,createdDateTime,thumbnails")
             .orderby("createdDateTime desc")
             .top(1000) // Adjust this number based on your needs
+            .expand("thumbnails")
             .get();
-
+  
           allDocuments = [...allDocuments, ...result.value];
         }
       }
-
+  
       const grouped = allDocuments.reduce(
         (acc: GroupedDocuments, doc: Document) => {
           const year = dayjs(doc.createdDateTime).format("YYYY");
@@ -112,11 +137,12 @@ const FileOperations: React.FC = () => {
         },
         {}
       );
-
+  
       setGroupedDocuments(grouped);
       setIsLoading(false);
     } catch (error) {
       console.error("Error fetching documents:", error);
+      setIsLoading(false);
     }
   };
 
@@ -218,72 +244,127 @@ const FileOperations: React.FC = () => {
   };
 
   return (
-    <div>
-      <DatePicker
-        value={selectedDate}
-        onChange={(value) => setSelectedDate(value || dayjs())}
-        disableFuture
-      />
+    <Box sx={{ padding: 2 }}>
+      <Stack>
+        <DatePicker
+          value={selectedDate}
+          onChange={(value) => setSelectedDate(value || dayjs())}
+          disableFuture
+        />
 
-      <button onClick={handleCreateAndOpen}>
-        Create and Open New Word Document
-      </button>
-      <input
-        type="file"
-        ref={fileInputRef}
-        style={{ display: "none" }}
-        onChange={handleFileUpload}
-        disabled={isUploading}
-      />
-      <button
-        onClick={() => fileInputRef.current?.click()}
-        disabled={isUploading}
-      >
-        {isUploading ? `Uploading... ${uploadProgress}%` : "Upload File"}
-      </button>
+        <Grid container gap={1} sx={{ mt: 3 }}>
+          <Fab color="primary" onClick={handleCreateAndOpen}>
+            <Create />
+          </Fab>
+
+          <Fab
+            color="secondary"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+          >
+            <CloudUpload />
+
+            <input
+              type="file"
+              ref={fileInputRef}
+              style={{ display: "none" }}
+              onChange={handleFileUpload}
+              disabled={isUploading}
+            />
+          </Fab>
+        </Grid>
+      </Stack>
+
       {isUploading && (
-        <div
-          style={{
-            width: "200px",
-            backgroundColor: "#e0e0e0",
-            marginTop: "10px",
-          }}
-        >
-          <div
-            style={{
-              width: `${uploadProgress}%`,
-              backgroundColor: "#4CAF50",
-              height: "20px",
-              transition: "width 0.3s ease-in-out",
-            }}
-          />
-        </div>
+        <Box sx={{ width: "100%", mt: 2 }}>
+          <LinearProgress variant="determinate" value={uploadProgress} />
+        </Box>
       )}
-      <h2>On This Day:</h2>
+
+      <Typography variant="h4" sx={{ mt: 4 }}>
+        On This Day:
+      </Typography>
+
       {isLoading ? (
-        <p>Loading ...</p>
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 2 }}>
+          <CircularProgress />
+        </Box>
       ) : (
         Object.entries(groupedDocuments)
           .sort(([a], [b]) => parseInt(b) - parseInt(a))
           .map(([year, docs]) => (
-            <div key={year}>
-              <h3>
+            <Box key={year} sx={{ mt: 3 }}>
+              <Typography variant="h5">
                 {getYearLabel(year)} ({year})
-              </h3>
-              <ul>
-                {docs.map((doc) => (
-                  <li key={doc.id}>
-                    {doc.name}
-                    <button onClick={() => openDocument(doc.webUrl)}>
-                      Open
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+              </Typography>
+              <Box component="ul" sx={{ paddingLeft: 2 }}>
+                {docs.map((doc) => {
+                  if (doc.name.slice(-5) === ".docx")
+                    return (
+                      <Box
+                        component="li"
+                        key={doc.id}
+                        sx={{ mt: 1, listStyleType: "none" }}
+                        onClick={() => openDocument(doc.webUrl)}
+                      >
+                        <Button
+                          variant="outlined"
+                          color="primary"
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "5px 10px",
+                          }}
+                        >
+                          <Fab size="small" color="primary">
+                            <Description />
+                          </Fab>
+                          {doc.name}
+                        </Button>
+                      </Box>
+                    );
+                  else if (doc?.thumbnails && doc?.thumbnails.length > 0)
+                    return (
+                      <Box
+                        component="li"
+                        key={doc.id}
+                        sx={{ mt: 1, listStyleType: "none" }}
+                        onClick={() => openDocument(doc.webUrl)}
+                      >
+                        <Button
+                          variant="outlined"
+                          sx={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "8px",
+                            padding: "5px 10px",
+                          }}
+                        >
+                          <Avatar
+                            // @ts-ignore
+                            src={doc.thumbnails[0].small.url}
+                            alt="Thumbnail"
+                          />
+                          {doc.name}
+                        </Button>
+                      </Box>
+                    );
+                  else
+                    <Box
+                      component="li"
+                      key={doc.id}
+                      sx={{ mt: 1, listStyleType: "none" }}
+                      onClick={() => openDocument(doc.webUrl)}
+                    >
+                      <Button variant="outlined">{doc.name}</Button>
+                    </Box>;
+                })}
+              </Box>
+            </Box>
           ))
       )}
-    </div>
+    </Box>
   );
 };
 

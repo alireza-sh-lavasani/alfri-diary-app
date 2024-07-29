@@ -7,10 +7,11 @@ import reportWebVitals from "./reportWebVitals";
 import { PublicClientApplication } from "@azure/msal-browser";
 import { msalConfig } from "./auth/authConfig";
 import { MsalProvider } from "@azure/msal-react";
-import '@fontsource/roboto/300.css';
-import '@fontsource/roboto/400.css';
-import '@fontsource/roboto/500.css';
-import '@fontsource/roboto/700.css';
+import { BrowserRouter as Router } from "react-router-dom";
+import "@fontsource/roboto/300.css";
+import "@fontsource/roboto/400.css";
+import "@fontsource/roboto/500.css";
+import "@fontsource/roboto/700.css";
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
@@ -20,7 +21,9 @@ const root = ReactDOM.createRoot(
 root.render(
   <React.StrictMode>
     <MsalProvider instance={msalInstance}>
-      <App />
+      <Router>
+        <App />
+      </Router>
     </MsalProvider>
   </React.StrictMode>
 );
