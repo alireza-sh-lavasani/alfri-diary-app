@@ -4,7 +4,6 @@ import { Client } from "@microsoft/microsoft-graph-client";
 import axios from "axios";
 import { loginRequest } from "../auth/authConfig";
 import dayjs from "dayjs";
-
 interface Document {
   id: string;
   name: string;
@@ -12,12 +11,41 @@ interface Document {
   createdDateTime: string;
 }
 
+interface GroupedDocuments {
+  [year: string]: Document[];
+}
+
+// Mock data generator
+const generateMockData = (): Document[] => {
+  const currentDate = dayjs();
+  const mockData: Document[] = [];
+
+  for (let year = currentDate.year(); year >= currentDate.year() - 5; year--) {
+    const docsCount = Math.floor(Math.random() * 5) + 1; // 1 to 5 documents per year
+    for (let i = 0; i < docsCount; i++) {
+      mockData.push({
+        id: `doc-${year}-${i}`,
+        name: `Document ${i + 1} of ${year}`,
+        webUrl: `https://example.com/doc-${year}-${i}`,
+        createdDateTime: dayjs(
+          `${year}-${currentDate.format("MM-DD")}T12:00:00Z`
+        ).toISOString(),
+      });
+    }
+  }
+
+  return mockData;
+};
+
 const FileOperations: React.FC = () => {
   const { instance, accounts } = useMsal();
-  const [documents, setDocuments] = useState<Document[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [groupedDocuments, setGroupedDocuments] = useState<GroupedDocuments>(
+    {}
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
     listDocuments();
@@ -38,14 +66,55 @@ const FileOperations: React.FC = () => {
 
   const listDocuments = async () => {
     const graphClient = await getGraphClient();
-    const today = dayjs().startOf("day").toISOString();
-    const result = await graphClient
-      .api("/me/drive/root:/Documents:/children")
-      .filter(`createdDateTime ge ${today}`)
-      .select("id,name,webUrl,createdDateTime")
-      .orderby("createdDateTime desc")
-      .get();
-    setDocuments(result.value);
+    const now = dayjs();
+    const currentYear = now.year();
+    const month = now.format("MM");
+    const day = now.format("DD");
+
+    try {
+      let allDocuments: Document[] = [];
+
+      if (process.env.REACT_APP_USE_MOCK_DOCUMENTS === "true") {
+        allDocuments = generateMockData();
+      } else {
+        setIsLoading(true);
+
+        // Fetch documents for the last 10 years (you can adjust this number)
+        for (let year = currentYear; year > currentYear - 10; year--) {
+          const startDate = `${year}-${month}-${day}T00:00:00Z`;
+          const endDate = `${year}-${month}-${parseInt(day) + 1}T00:00:00Z`;
+
+          const result = await graphClient
+            .api("/me/drive/root:/Documents:/children")
+            .filter(
+              `createdDateTime ge ${startDate} and createdDateTime lt ${endDate}`
+            )
+            .select("id,name,webUrl,createdDateTime")
+            .orderby("createdDateTime desc")
+            .top(1000) // Adjust this number based on your needs
+            .get();
+
+          allDocuments = [...allDocuments, ...result.value];
+        }
+      }
+
+      const grouped = allDocuments.reduce(
+        (acc: GroupedDocuments, doc: Document) => {
+          const year = dayjs(doc.createdDateTime).format("YYYY");
+          if (!acc[year]) {
+            acc[year] = [];
+          }
+          acc[year].push(doc);
+          return acc;
+        },
+        {}
+      );
+
+      setGroupedDocuments(grouped);
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error fetching documents:", error);
+    }
   };
 
   const createDocument = async () => {
@@ -93,20 +162,16 @@ const FileOperations: React.FC = () => {
         account: accounts[0],
       });
 
-      await axios.put(
-        `https://graph.microsoft.com/v1.0${uploadUrl}`,
-        file,
-        {
-          headers: {
-            "Content-Type": file.type,
-            Authorization: `Bearer ${tokenResponse.accessToken}`,
-          },
-          onUploadProgress: (progressEvent) => {
-            const progress = Math.round((progressEvent.loaded / totalSize) * 100);
-            setUploadProgress(progress);
-          },
-        }
-      );
+      await axios.put(`https://graph.microsoft.com/v1.0${uploadUrl}`, file, {
+        headers: {
+          "Content-Type": file.type,
+          Authorization: `Bearer ${tokenResponse.accessToken}`,
+        },
+        onUploadProgress: (progressEvent) => {
+          const progress = Math.round((progressEvent.loaded / totalSize) * 100);
+          setUploadProgress(progress);
+        },
+      });
 
       await listDocuments();
     } catch (error) {
@@ -132,6 +197,20 @@ const FileOperations: React.FC = () => {
     const newDocumentUrl = await createDocument();
     if (newDocumentUrl) {
       openDocument(newDocumentUrl);
+    }
+  };
+
+  const getYearLabel = (year: string): string => {
+    const currentYear = dayjs().year();
+    const yearDiff = currentYear - parseInt(year);
+
+    switch (yearDiff) {
+      case 0:
+        return "This year";
+      case 1:
+        return "1 year ago";
+      default:
+        return `${yearDiff} years ago`;
     }
   };
 
@@ -171,15 +250,30 @@ const FileOperations: React.FC = () => {
           />
         </div>
       )}
-      <h2>Your Documents Created Today:</h2>
-      <ul>
-        {documents.map((doc) => (
-          <li key={doc.id}>
-            {doc.name}
-            <button onClick={() => openDocument(doc.webUrl)}>Open</button>
-          </li>
-        ))}
-      </ul>
+      <h2>On This Day:</h2>
+      {isLoading ? (
+        <p>Loading ...</p>
+      ) : (
+        Object.entries(groupedDocuments)
+          .sort(([a], [b]) => parseInt(b) - parseInt(a))
+          .map(([year, docs]) => (
+            <div key={year}>
+              <h3>
+                {getYearLabel(year)} ({year})
+              </h3>
+              <ul>
+                {docs.map((doc) => (
+                  <li key={doc.id}>
+                    {doc.name}
+                    <button onClick={() => openDocument(doc.webUrl)}>
+                      Open
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
+      )}
     </div>
   );
 };
