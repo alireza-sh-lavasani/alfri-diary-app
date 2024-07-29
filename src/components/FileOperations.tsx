@@ -4,6 +4,8 @@ import { Client } from "@microsoft/microsoft-graph-client";
 import axios from "axios";
 import { loginRequest } from "../auth/authConfig";
 import dayjs from "dayjs";
+import { DatePicker } from "@mui/x-date-pickers";
+
 interface Document {
   id: string;
   name: string;
@@ -16,8 +18,8 @@ interface GroupedDocuments {
 }
 
 // Mock data generator
-const generateMockData = (): Document[] => {
-  const currentDate = dayjs();
+const generateMockData = (selectedDate: dayjs.Dayjs): Document[] => {
+  const currentDate = selectedDate;
   const mockData: Document[] = [];
 
   for (let year = currentDate.year(); year >= currentDate.year() - 5; year--) {
@@ -46,10 +48,11 @@ const FileOperations: React.FC = () => {
     {}
   );
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [selectedDate, setSelectedDate] = useState<dayjs.Dayjs>(dayjs());
 
   useEffect(() => {
     listDocuments();
-  }, []);
+  }, [selectedDate]);
 
   const getGraphClient = async () => {
     const account = accounts[0];
@@ -66,7 +69,7 @@ const FileOperations: React.FC = () => {
 
   const listDocuments = async () => {
     const graphClient = await getGraphClient();
-    const now = dayjs();
+    const now = selectedDate;
     const currentYear = now.year();
     const month = now.format("MM");
     const day = now.format("DD");
@@ -75,7 +78,7 @@ const FileOperations: React.FC = () => {
       let allDocuments: Document[] = [];
 
       if (process.env.REACT_APP_USE_MOCK_DOCUMENTS === "true") {
-        allDocuments = generateMockData();
+        allDocuments = generateMockData(selectedDate);
       } else {
         setIsLoading(true);
 
@@ -216,6 +219,12 @@ const FileOperations: React.FC = () => {
 
   return (
     <div>
+      <DatePicker
+        value={selectedDate}
+        onChange={(value) => setSelectedDate(value || dayjs())}
+        disableFuture
+      />
+
       <button onClick={handleCreateAndOpen}>
         Create and Open New Word Document
       </button>
