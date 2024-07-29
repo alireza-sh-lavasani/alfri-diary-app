@@ -97,20 +97,22 @@ const FileOperations: React.FC = () => {
     const currentYear = now.year();
     const month = now.format("MM");
     const day = now.format("DD");
-  
+
     try {
       let allDocuments: Document[] = [];
-  
+
       if (process.env.REACT_APP_USE_MOCK_DOCUMENTS === "true") {
         allDocuments = generateMockData(selectedDate);
       } else {
         setIsLoading(true);
-  
+
         // Fetch documents for the last 10 years (you can adjust this number)
         for (let year = currentYear; year > currentYear - 10; year--) {
-          const startDate = dayjs(`${year}-${month}-${day}`).startOf('day').toISOString();
-          const endDate = dayjs(startDate).add(1, 'day').toISOString();
-  
+          const startDate = dayjs(`${year}-${month}-${day}`)
+            .startOf("day")
+            .toISOString();
+          const endDate = dayjs(startDate).add(1, "day").toISOString();
+
           const result = await graphClient
             .api("/me/drive/root:/Documents:/children")
             .filter(
@@ -121,11 +123,11 @@ const FileOperations: React.FC = () => {
             .top(1000) // Adjust this number based on your needs
             .expand("thumbnails")
             .get();
-  
+
           allDocuments = [...allDocuments, ...result.value];
         }
       }
-  
+
       const grouped = allDocuments.reduce(
         (acc: GroupedDocuments, doc: Document) => {
           const year = dayjs(doc.createdDateTime).format("YYYY");
@@ -137,7 +139,7 @@ const FileOperations: React.FC = () => {
         },
         {}
       );
-  
+
       setGroupedDocuments(grouped);
       setIsLoading(false);
     } catch (error) {
@@ -305,8 +307,7 @@ const FileOperations: React.FC = () => {
                         component="li"
                         key={doc.id}
                         sx={{ mt: 1, listStyleType: "none" }}
-                        onClick={() => openDocument(doc.webUrl)}
-                      >
+                        >
                         <Button
                           variant="outlined"
                           color="primary"
@@ -316,6 +317,7 @@ const FileOperations: React.FC = () => {
                             gap: "8px",
                             padding: "5px 10px",
                           }}
+                          onClick={() => openDocument(doc.webUrl)}
                         >
                           <Fab size="small" color="primary">
                             <Description />
@@ -330,7 +332,6 @@ const FileOperations: React.FC = () => {
                         component="li"
                         key={doc.id}
                         sx={{ mt: 1, listStyleType: "none" }}
-                        onClick={() => openDocument(doc.webUrl)}
                       >
                         <Button
                           variant="outlined"
@@ -340,6 +341,7 @@ const FileOperations: React.FC = () => {
                             gap: "8px",
                             padding: "5px 10px",
                           }}
+                          onClick={() => openDocument(doc.webUrl)}
                         >
                           <Avatar
                             // @ts-ignore
@@ -355,9 +357,13 @@ const FileOperations: React.FC = () => {
                       component="li"
                       key={doc.id}
                       sx={{ mt: 1, listStyleType: "none" }}
-                      onClick={() => openDocument(doc.webUrl)}
                     >
-                      <Button variant="outlined">{doc.name}</Button>
+                      <Button
+                        onClick={() => openDocument(doc.webUrl)}
+                        variant="outlined"
+                      >
+                        {doc.name}
+                      </Button>
                     </Box>;
                 })}
               </Box>
