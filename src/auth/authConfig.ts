@@ -15,7 +15,7 @@ export const msalConfig = {
   auth: {
     clientId: `${process.env.REACT_APP_MSAL_CLIENT_ID}`,
     authority: `https://login.microsoftonline.com/consumers`,
-    redirectUri: "http://localhost:3000",
+    redirectUri: process.env.REACT_APP_ENVIRONMENT === 'local' ? "http://localhost:3000" : "https://alfri-diary-app.vercel.app",
     prompt: "select_account",
   },
   cache: {
